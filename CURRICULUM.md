@@ -1,256 +1,209 @@
-# Deep Learning 커리큘럼 — Transformer & VLM 마스터 루트
+# Deep Learning 커리큘럼 — Transformer 이해 + 직접 학습 (10주 기초 강화판)
 
 > **최종 목표**
-> 1. Transformer를 수식·구현·학습 동역학까지 **완벽히** 이해한다.
-> 2. 그 위에서 Vision-Language Model(VLM)의 구조와 학습 방식을 이해하고 직접 작게 구현해본다.
+> 1. Transformer의 **이론을 수식·구조까지 탄탄하게** 이해한다.
+> 2. 작은 Transformer(nanoGPT 스타일)를 **직접 학습**시켜 Tiny Shakespeare에서 loss가 내려가고 그럴듯한 텍스트가 생성되는 것을 본인 손으로 확인한다.
 >
-> **학습 시간**: 하루 30분 (주 5일) · 총 **약 23주**
-> **스택**: Python, PyTorch, HuggingFace `transformers`, `datasets`
+> **학습 시간**: 하루 30분 (주 5일) · 총 **10주**
+> **스택**: Python, PyTorch
+> **1순위 레퍼런스**: Andrej Karpathy — `nn-zero-to-hero`, `micrograd`, `makemore`, `nanoGPT`, "Let's build GPT" 영상
+
+---
+
+## 설계 원칙
+
+- **기초 탄탄**: 수학(선형대수·미적분)·역전파·MLP·최적화까지 **5주를 온전히 투입**. 이 위에서만 Attention이 "수식으로" 읽힌다.
+- **수식은 손으로**: softmax+CE, 역전파, scaled dot-product attention — 최소 한 번은 노트에 손으로.
+- **돌려봐야 안다**: 매 구간마다 돌아가는 코드 1개. 마지막 2주는 순수 학습·디버깅.
+- **Karpathy 먼저**: 영상 1개가 교과서 한 챕터를 대체할 때가 많음. 있으면 1순위.
+- **막히면 남기기**: 이해 안 된 수식/코드는 `til/YYYY-MM-DD.md`에 "오늘 막힌 것"으로. 다음날 같이 풀자.
 
 ---
 
 ## 전체 로드맵
 
 ```
-[기초 다지기]        → [Transformer 완전정복]   → [비전 파트]        → [VLM]
- Phase 1–3 (9주)      Phase 4–5 (6주)           Phase 6 (3주)       Phase 7–9 (7주)
+[수학·역전파·MLP 기초]                  [언어모델 → Attention → Transformer]       [학습 🎯]
+ Week 1–5 (5주)                          Week 6–8 (3주)                             Week 9–10 (2주)
 ```
 
-모든 Phase는 "이론 → 손으로 유도 → PyTorch 구현 → 논문 확인" 4단을 반복.
+---
+
+## Week 1 — 선형대수 직관 + NumPy 감각
+
+> Transformer 수식이 "차원으로 읽히는" 수준이 목표. NumPy도 같이 친해진다.
+
+- **D1** 벡터·행렬·내적의 기하적 의미 (3Blue1Brown *Essence of Linear Algebra* Ep.1–2) + NumPy `np.array`, shape, `.T`
+- **D2** 행렬곱 = 선형변환의 합성 (Ep.3–4) + NumPy `@` / `np.matmul` 실습
+- **D3** NumPy 브로드캐스팅·슬라이싱·`reshape` 집중 — 헷갈리는 지점 손으로 그려보기
+- **D4** 전치·역행렬·랭크 직관 (SVD는 "개념만") — NumPy로 짧게 확인
+- **D5** 텐서 차원 `(B, T, C)` 읽기 연습 + Attention 수식 `softmax(QKᵀ/√d_k)V`를 **차원만으로** 분해
+
+> *einsum은 Week 3에서 PyTorch와 함께 다룸. Week 1은 기본 `@` / `*` / 브로드캐스팅에 집중.*
 
 ---
 
-## Phase 1. 수학 복습 (2주 / Week 1–2)
+## Week 2 — 미적분 + Softmax/Cross Entropy
 
-> 사용자 상태: Python 익숙 / PyTorch 생소 / 선형대수·미적분 복습 필요.
-> → Python 기초는 건너뛰고, 수학은 "Transformer 수식이 막힘없이 읽힐 정도"까지만 복습.
+> 역전파의 뼈대(연쇄법칙)와 분류의 손실함수를 **손으로** 유도.
 
-- **Week 1 — 선형대수 복습**
-  - D1 벡터/행렬/내적의 기하적 의미 (3Blue1Brown Ep.1–3)
-  - D2 행렬곱 = 선형변환, 합성 (Ep.4)
-  - D3 텐서 차원 감각: `(batch, seq, dim)` 읽는 법, NumPy `einsum` 5문제
-  - D4 전치·역행렬·랭크 직관 / SVD는 "개념만"
-  - D5 주간 정리: Attention 수식 `softmax(QKᵀ/√d)V`를 차원으로만 분해해보기
-- **Week 2 — 미적분·확률 복습 + Softmax/CE**
-  - D1 편미분, 그라디언트 = "가장 가파르게 오르는 방향"
-  - D2 연쇄법칙 — 역전파의 뼈대 (손으로 2-layer 예시 1개)
-  - D3 Softmax, Log-Softmax, 수치안정성 (왜 max를 빼는가)
-  - D4 Cross Entropy 유도, Softmax+CE의 깔끔한 그라디언트
-  - D5 KL divergence 직관, MLE = CE 최소화 관점
-
-📘 추천: 3Blue1Brown "Essence of Linear Algebra" + "Essence of Calculus" (각 10분 내외).
-   매일 영상 1개 + 노트 3줄이면 30분 안에 끝남.
+- **D1** 편미분, 그라디언트 = "가장 가파르게 오르는 방향" (3B1B *Essence of Calculus* 일부)
+- **D2** 연쇄법칙 — 2-layer MLP 예시 손유도
+- **D3** Softmax, Log-Softmax, 수치안정성 (왜 max를 빼는가)
+- **D4** Cross Entropy 유도, Softmax+CE의 깔끔한 그라디언트 `ŷ - y`
+- **D5** KL divergence 직관, MLE = CE 최소화 관점
 
 ---
 
-## Phase 1.5. PyTorch 집중 입문 (1주 / Week 3)
+## Week 3 — PyTorch & autograd
 
-> Python은 익숙하니 **PyTorch API와 autograd만** 빠르게.
+> Python은 익숙하다는 전제. PyTorch API와 **자동미분**만 빠르게.
 
-- D1 `torch.Tensor` 기본, NumPy와의 차이, `dtype`/`device`
-- D2 autograd: `requires_grad`, `.backward()`, `.grad` — 수식 손유도 결과와 일치 확인
-- D3 `nn.Module` 작성법, `nn.Linear`로 선형회귀를 바닥부터
-- D4 `optim.SGD`/`Adam`, 표준 학습 루프 템플릿 암기
-- D5 GPU(`.to(device)`), 재현성(seed), 체크포인트 저장/로드
-- (주말 보너스) `DataLoader`와 `Dataset` 감 잡기
-
----
-
-## Phase 2. 신경망 핵심 (3주 / Week 4–6)
-
-"왜 이렇게 동작하는지"를 설명할 수 있는 수준이 목표.
-
-- **Week 4 — MLP & 역전파**
-  - 순전파/역전파 수식 직접 유도 (한 번은 손으로)
-  - NumPy로 2-layer MLP 구현 → MNIST 학습
-- **Week 5 — 최적화 & 정규화**
-  - SGD/Momentum/Adam 차이
-  - 가중치 초기화(Xavier/He), LayerNorm vs BatchNorm
-  - Dropout, Weight decay
-- **Week 6 — 임베딩 & 언어모델 감 잡기**
-  - 토큰/임베딩 개념, `nn.Embedding`
-  - n-gram 언어모델 → 신경 언어모델 개요
-  - 문자 단위 LM을 작은 MLP로 (Karpathy "makemore" 1편)
+- **D1** `torch.Tensor` 기본, NumPy와 차이, `dtype`/`device`
+- **D2** autograd: `requires_grad`, `.backward()`, `.grad` — Week 2 손유도와 수치 일치 확인
+- **D3** `nn.Module`, `nn.Linear`로 선형회귀 바닥부터
+- **D4** `optim.SGD`/`Adam`, 표준 학습 루프 템플릿 암기
+- **D5** GPU `.to(device)`, 재현성(seed), 체크포인트 저장/로드
 
 ---
 
-## Phase 3. 시퀀스 모델 맛보기 (1주 / Week 7)
+## Week 4 — micrograd & 역전파 직접 만들기
 
-Transformer의 **이전 세대**를 빠르게 훑어 대비 포인트를 남김.
+> "자동으로 되는 것"이 아니라 **손으로 그려지는 것**으로.
 
-- D1 RNN의 아이디어와 한계(기울기 소실)
-- D2 LSTM/GRU 게이트 직관
-- D3 Seq2Seq의 병목 문제 → Attention 등장 배경
-- D4 Bahdanau Attention 수식
-- D5 정리: "왜 Transformer가 필요했는가?" 한 쪽 요약
+- **D1** Karpathy *micrograd* 영상 전반 — 스칼라 자동미분 원리
+- **D2** 역전파 수식 손유도 (2-layer MLP 끝까지, Week 2와 연결)
+- **D3** micrograd 엔진 따라 만들기 — `add` / `mul` / `tanh`의 backward
+- **D4** 만든 엔진으로 작은 분류 문제 학습 → loss 내려가는 것 확인
+- **D5** PyTorch autograd와 결과 비교 (그라디언트 값 일치하는가)
 
----
-
-## Phase 4. Transformer 완전정복 — 이론 (3주 / Week 8–10)
-
-이 구간이 **이 커리큘럼의 심장**. 천천히, 확실히.
-
-- **Week 8 — Attention의 모든 것**
-  - D1 Query/Key/Value 개념, 내적 유사도
-  - D2 Scaled Dot-Product Attention 수식 유도 (왜 √d_k로 나누나)
-  - D3 Multi-Head Attention: 왜 나눠서 여러 번?
-  - D4 Masking: padding mask, causal mask
-  - D5 복잡도 O(n²d) 분석, 메모리 병목 이해
-- **Week 9 — Transformer 블록**
-  - D1 Positional Encoding (sinusoidal vs learned vs RoPE 예고)
-  - D2 Feed-Forward Network, residual + LayerNorm
-  - D3 Pre-LN vs Post-LN 차이와 학습 안정성
-  - D4 Encoder 블록 완전 분해
-  - D5 Decoder 블록 + cross-attention
-- **Week 10 — 논문 정독: "Attention Is All You Need"**
-  - D1 Abstract + Introduction + Model Architecture 섹션
-  - D2 Attention 섹션 수식 한 줄씩 체크
-  - D3 Training 섹션 (optimizer, warmup, label smoothing)
-  - D4 Results/Ablation 표 읽기
-  - D5 한 페이지 요약본 작성 → `til/transformer_paper.md`
+📘 자료: `karpathy/micrograd` + "The spelled-out intro to neural networks and backpropagation"
 
 ---
 
-## Phase 5. Transformer 완전정복 — 구현 & 변형 (3주 / Week 11–13)
+## Week 5 — MLP, 최적화, 정규화
 
-"읽을 수 있다"에서 "만들 수 있다"로.
+> "왜 학습이 되는가"의 디테일. LN이 왜 Transformer 표준인지도 이 주에.
 
-- **Week 11 — 밑바닥부터 구현**
-  - D1 Tokenizer: BPE 개념과 HuggingFace `tokenizers` 사용
-  - D2 `MultiHeadAttention` 모듈 직접 구현
-  - D3 `TransformerBlock` (MHA + FFN + residual + LN)
-  - D4 전체 Decoder-only 모델 조립 (nanoGPT 스타일)
-  - D5 Tiny Shakespeare로 학습 돌려보기
-- **Week 12 — 학습 동역학 이해**
-  - D1 Warmup + cosine schedule, 왜 필요한가
-  - D2 Gradient clipping, mixed precision(`amp`)
-  - D3 Loss curve 읽는 법, overfitting 징후
-  - D4 생성 디코딩: greedy / top-k / top-p / temperature
-  - D5 내 모델로 텍스트 생성해보기
-- **Week 13 — Encoder/Decoder 계열 비교**
-  - D1 GPT (Decoder-only, causal LM)
-  - D2 BERT (Encoder-only, Masked LM)
-  - D3 T5 (Encoder-Decoder, span corruption)
-  - D4 HuggingFace로 BERT 파인튜닝 체험 (감정분석)
-  - D5 세 계열을 한 표로 비교 정리
+- **D1** SGD / Momentum / Adam 차이 — 그림으로 비교
+- **D2** 가중치 초기화: Xavier / He — 왜 필요한가 (분산 유지 관점)
+- **D3** **LayerNorm vs BatchNorm** — 왜 Transformer는 LN인가 (시퀀스 길이·배치 독립성)
+- **D4** Dropout, Weight decay 직관
+- **D5** PyTorch로 2-layer MLP MNIST 학습, loss curve 해석
 
 ---
 
-## Phase 6. 비전 파트 — CNN은 얇게, ViT는 두껍게 (3주 / Week 14–16)
+## Week 6 — makemore: 언어모델 감 잡기
 
-VLM으로 가려면 이미지를 "토큰처럼" 다룰 줄 알아야 함.
+> "다음 토큰 확률 분포" 예측 구조를 체화.
 
-- **Week 14 — CNN 속성 이해 (얇게)**
-  - D1 Convolution/pooling 직관, 수용영역
-  - D2 ResNet의 skip connection이 왜 중요했나
-  - D3 torchvision pretrained로 특징 추출 체험
-  - D4 이미지 전처리·정규화·augmentation 파이프라인
-  - D5 CNN vs Transformer 귀납적 편향 비교
-- **Week 15 — Vision Transformer (ViT)**
-  - D1 이미지 → 패치 → 토큰 시퀀스 변환
-  - D2 CLS 토큰, Positional Embedding in ViT
-  - D3 ViT 논문 ("An Image is Worth 16x16 Words") 정독
-  - D4 `timm`으로 pretrained ViT 불러와 추론
-  - D5 패치 임베딩 모듈 직접 구현
-- **Week 16 — 현대 비전 백본 개요**
-  - D1 Swin Transformer 아이디어 (윈도우 어텐션)
-  - D2 MAE (Masked Autoencoder) 사전학습
-  - D3 DINO/DINOv2 자기지도 학습 개요
-  - D4 비전 백본 선택 가이드 정리
-  - D5 Phase 6 복습 + 손그림 정리
+- **D1** Karpathy *makemore* ep.1 — bigram 언어모델, 카운트 기반 → 신경망 기반
+- **D2** `nn.Embedding` 실제 동작 (lookup table), 임베딩 차원 직관
+- **D3** makemore MLP 버전 — 문맥 창 + 임베딩 결합
+- **D4** 학습률 감, LR finder, 과적합/미적합 신호
+- **D5** 생성해보기, "logits → softmax → 샘플링" 파이프라인 체화
+
+📘 자료: `karpathy/makemore` + "Building makemore" 시리즈
 
 ---
 
-## Phase 7. VLM의 기초 — CLIP과 대조학습 (2주 / Week 17–18)
+## Week 7 — Attention 수식 완전정복
 
-VLM의 "공통 임베딩 공간" 개념이 이 구간에서 자리잡음.
+> **이 커리큘럼의 심장.** 천천히, 수식 중심으로.
 
-- **Week 17 — CLIP 완전 이해**
-  - D1 Contrastive learning 기본 (InfoNCE 손실)
-  - D2 CLIP 아키텍처: image encoder + text encoder
-  - D3 CLIP 논문 ("Learning Transferable Visual Models...") 정독
-  - D4 `open_clip`으로 zero-shot 분류 해보기
-  - D5 이미지↔텍스트 유사도 검색 미니 실습
-- **Week 18 — CLIP 이후 개선들**
-  - D1 SigLIP: sigmoid 손실이 바꾼 것
-  - D2 BLIP: captioning + matching 멀티태스크
-  - D3 ALIGN, EVA-CLIP 간단 비교
-  - D4 대조학습의 한계 — 왜 "이해"가 아닌 "매칭"인가
-  - D5 한 장 요약: 대조학습 계열 VLM 계보
+- **D1** Query/Key/Value 개념, 내적 = 유사도
+- **D2** Scaled Dot-Product `softmax(QKᵀ/√d_k)V` — **왜 √d_k로 나누는가** (분산 분석 손유도)
+- **D3** Masking: causal mask(미래 가리기), padding mask
+- **D4** Multi-Head — 왜 쪼개서 여러 번? 표현 공간 분할 직관
+- **D5** 복잡도 O(n²·d) 분석, 메모리 병목 이해
 
 ---
 
-## Phase 8. 현대 VLM — LLaVA 계열과 그 너머 (3주 / Week 19–21)
+## Week 8 — Transformer 블록 + 논문 정독
 
-"이미지를 LLM에 넣는다"가 실제로 어떻게 되는지.
+> Attention 옆에 붙는 조각들 + *Attention Is All You Need* 직접.
 
-- **Week 19 — 구조 이해**
-  - D1 VLM의 3요소: vision encoder + projector + LLM
-  - D2 LLaVA 아키텍처 분해 (왜 단순 MLP projector로 충분한가)
-  - D3 Q-Former (BLIP-2) 접근과 차이점
-  - D4 Flamingo의 cross-attention 방식
-  - D5 세 가지 접근을 한 표로
-- **Week 20 — 학습 레시피**
-  - D1 사전학습 vs instruction tuning 2단계
-  - D2 Vision-language instruction 데이터 형식
-  - D3 Frozen LLM + trainable projector 전략
-  - D4 LoRA/QLoRA 개념 (VLM 파인튜닝에서 필수)
-  - D5 LLaVA 논문 핵심 섹션 정독
-- **Week 21 — 최신 흐름 훑기**
-  - D1 Qwen-VL, InternVL 계열 특징
-  - D2 고해상도 처리: AnyRes, tiling 전략
-  - D3 동적 해상도 & multi-image 입력
-  - D4 비디오 VLM 확장 개념
-  - D5 "내가 VLM을 만든다면" 설계 노트 작성
+- **D1** Positional Encoding (sinusoidal 수식 감 — RoPE/learned는 이름만)
+- **D2** FFN, Residual, LayerNorm의 역할
+- **D3** Pre-LN vs Post-LN — 학습 안정성 차이
+- **D4** 논문 *"Attention Is All You Need"* — Model Architecture 섹션 수식 한 줄씩
+- **D5** Decoder-only(GPT 계열) 구조 총정리 → `til/transformer_arch.md`
 
 ---
 
-## Phase 9. 캡스톤 — 작은 VLM 굴려보기 (2주 / Week 22–23)
+## Week 9 — nanoGPT 코드 해부
 
-- **Week 22**
-  - D1 프로젝트 정의: pretrained ViT + 작은 LLM + MLP projector
-  - D2 데이터셋 선택 (COCO Captions 일부 등)
-  - D3 forward pass 조립, shape 디버깅
-  - D4 projector만 학습하는 루프 작성
-  - D5 첫 학습 — 손실 내려가는지 확인
-- **Week 23**
-  - D1 생성 결과 정성 평가
-  - D2 간단한 VQA 예시로 테스트
-  - D3 실패 사례 분석
-  - D4 README + 모델카드 작성
-  - D5 회고: 남은 궁금증 → 다음 학습 주제로
+> 읽을 수 있다 → **만들 수 있다**로 건너가는 주.
+
+- **D1** Karpathy *"Let's build GPT"* 영상 전반부 — 데이터, tokenizer
+- **D2** `nanoGPT/model.py` — `CausalSelfAttention` 줄줄이 읽기
+- **D3** `Block`(Attention + FFN + residual + LN) 조립
+- **D4** `train.py` — 학습 루프, AdamW, weight decay 적용 방식
+- **D5** `generate()` — greedy / top-k / temperature 구현 읽기
+
+📘 자료: `karpathy/nanoGPT` + "Let's build GPT: from scratch, in code, spelled out"
+
+---
+
+## Week 10 — Tiny Shakespeare 학습 🎯
+
+> **이 주가 이 커리큘럼의 끝점.** loss가 내려가는 걸 네 눈으로 본다.
+
+- **D1** 환경 세팅 — 데이터 다운, tokenizer, 첫 forward pass
+- **D2** 학습 시작 — 첫 1000 step, initial loss가 `ln(vocab_size)` 근처인지 확인
+- **D3** Warmup + cosine schedule + gradient clipping + mixed precision(`amp`) 붙이기, loss curve 해석
+- **D4** 학습 완료 → 텍스트 생성. 디코딩 실험 (greedy / top-k / top-p / temperature)
+- **D5** 한 페이지 요약 **"Transformer: 입력부터 loss까지"** + 회고
+
+→ 산출물: `projects/nanogpt/` 에 학습 스크립트·loss 로그·샘플 생성 결과
 
 ---
 
 ## 매일 30분 루틴
 
-- **5분** — 어제 TIL 다시 읽기
-- **20분** — 오늘 주제 (영상/논문 문단/코드 중 택1)
+- **5분** — 어제 `til/` 읽기
+- **20분** — 오늘 주제 (영상 1개 / 논문 문단 / 코드 중 택1)
 - **5분** — `til/YYYY-MM-DD.md`에 3줄 요약 + 질문 1개
 
-## 레포 구조 제안
+---
+
+## 레포 구조
 
 ```
 Deep-Learning-TIL/
 ├── CURRICULUM.md        # 이 문서
 ├── til/                 # 매일 기록
-├── notebooks/           # 실습 노트북 (Phase별 폴더)
-├── papers/              # 논문 요약 마크다운
+├── notebooks/           # 주차별 실습 (Week별 폴더)
+├── papers/              # 논문 요약 (Week 8: Attention Is All You Need)
 └── projects/
-    ├── nanogpt/         # Week 10 산출물
-    └── tiny-vlm/        # Week 21–22 캡스톤
+    └── nanogpt/         # Week 9–10 산출물
 ```
+
+---
 
 ## 필수 레퍼런스
 
-- **영상**: Karpathy "Zero to Hero" 시리즈 (특히 makemore, nanoGPT)
-- **논문**: Attention Is All You Need / ViT / CLIP / LLaVA
-- **코드**: `nanoGPT`, `open_clip`, `LLaVA` 공식 레포
-- **도구**: HuggingFace `transformers`, `datasets`, `timm`
+- **Karpathy GitHub** (1순위)
+  - `karpathy/nn-zero-to-hero` — 전체 영상 시리즈
+  - `karpathy/micrograd` — Week 4
+  - `karpathy/makemore` — Week 6
+  - `karpathy/nanoGPT` — Week 9–10
+- **영상**: "The spelled-out intro to backprop" / "Building makemore" / "Let's build GPT"
+- **논문**: Vaswani et al., *Attention Is All You Need* (2017)
+- **수학 보조**: 3Blue1Brown *Essence of Linear Algebra* / *Essence of Calculus*
 
 ---
 
 ## 막힐 때 규칙
 
 논문 수식이나 코드에서 막히면 넘어가지 말고 `til/`에 **"오늘 막힌 것"** 으로 남겨두기.
-다음날 같이 풀어나가자 — 이 레포에서 내가 옆에 있을게.
+다음날 같이 풀자 — 이 레포에서 내가 옆에 있을게.
+
+---
+
+## 다음 목표 후보 (10주 완주 후)
+
+이 10주를 끝내면 다음 중에서 고르자:
+- **VLM 트랙**: CLIP → LLaVA 계열 (원래 23주 플랜의 Phase 6–9, git history에 있음).
+- **스케일업**: 더 큰 모델·데이터로 nanoGPT 확장, FlashAttention·KV cache 등 심화.
+- **논문 재현**: GPT-2 재현, 최신 Transformer 변형 논문 하나.
